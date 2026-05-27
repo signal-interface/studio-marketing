@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  /* Studio palette — creative intelligence */
+  --color-canvas: #1a1625;
+  --color-canvas-light: #251e35;
+  --color-canvas-dark: #120f1c;
+
+  /* Slate palette */
+  --color-slate-brand: #2d2640;
+  --color-slate-mid: #443b5c;
+  --color-slate-light: #7c7291;
+
+  /* Accent — violet */
+  --color-accent: #8b5cf6;
+  --color-accent-light: #a78bfa;
+  --color-accent-dark: #7c3aed;
+  --color-accent-bg: #f5f3ff;
+
+  /* Neutral / ice */
+  --color-ice: #f5f3ff;
+  --color-ice-light: #faf8ff;
+
+  /* Functional colors */
+  --color-text: #1a1625;
+  --color-text-secondary: #57526b;
+  --color-text-tertiary: #9790a8;
+  --color-muted: #57526b;
+  --color-border: #e4e0ee;
+  --color-border-light: #f0edf6;
+
+  /* Status */
+  --color-green: #16a34a;
+  --color-green-bg: #f0fdf4;
+  --color-amber: #d97706;
+  --color-amber-bg: #fffbeb;
+
+  /* Fonts */
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(26, 22, 37, 0.05);
+  --shadow-md: 0 4px 12px rgba(26, 22, 37, 0.08);
+  --shadow-lg: 0 8px 32px rgba(26, 22, 37, 0.1);
+  --shadow-xl: 0 16px 48px rgba(26, 22, 37, 0.12);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+section[id] {
+  scroll-margin-top: 88px;
+}
+
+/* Reveal animations */
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-d1 {
+  transition-delay: 0.1s;
+}
+
+.reveal-d2 {
+  transition-delay: 0.2s;
+}
+
+.reveal-d3 {
+  transition-delay: 0.3s;
+}
