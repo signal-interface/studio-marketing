@@ -14,3 +14,21 @@ export const CANVAS = {
   cta: "Get early access",
   footnote: "Faraday Studio is in early access.",
 } as const;
+
+export const CREATION = {
+  formLabel: "Describe something to create",
+  placeholder: "Try “Saturn”",
+  stageLabel: "Creation demonstration",
+  examples: [
+    "Saturn",
+    "Luxury robotics brand",
+    "Payroll dashboard",
+    "Logo animation for Nova",
+    "Sunset over the ocean",
+  ],
+  panelTitle: "Interpretation preview",
+  panelNote: "Deterministic · in your browser",
+  truth: "Public demonstration, rendered live in your browser — not Studio output",
+  again: "Create another",
+  cta: "Get early access",
+} as const;
