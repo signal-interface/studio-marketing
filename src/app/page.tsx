@@ -1,10 +1,12 @@
 import Entrance from "@/components/experience/Entrance";
 import CreationCanvas from "@/components/experience/CreationCanvas";
-import HowItWorks from "@/components/sections/HowItWorks";
-import UseCases from "@/components/sections/UseCases";
-import WaitlistForm from "@/components/forms/WaitlistForm";
+import Possibility from "@/components/story/Possibility";
+import Positioning from "@/components/story/Positioning";
+import EarlyAccess from "@/components/story/EarlyAccess";
 import Footer from "@/components/layout/Footer";
 
+// One continuous experience: universe → canvas → creation →
+// possibility → positioning → back into space → early access.
 export default function HomePage() {
   return (
     <>
@@ -12,10 +14,9 @@ export default function HomePage() {
       <div id="site-content">
         <main>
           <CreationCanvas />
-          {/* Existing sections retained unchanged until Slice 3 rework. */}
-          <HowItWorks />
-          <UseCases />
-          <WaitlistForm />
+          <Possibility />
+          <Positioning />
+          <EarlyAccess />
         </main>
         <Footer />
       </div>

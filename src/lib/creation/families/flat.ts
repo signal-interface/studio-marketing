@@ -229,7 +229,7 @@ function drawInterface(g: G, mode: Mode, c: BuildContext) {
   box(g, mode, 0, 0, w, h, 0, "#f5f5f3");
 
   // Narrow artboards compose any interface as a device layout.
-  if (spec.variant === "mobile-app" || w < 520) {
+  if (spec.variant === "mobile-app" || (w < 520 && h > w * 0.8)) {
     const m = METRICS[spec.subject];
     const ph = h * 0.92, pw = Math.min(w < 520 ? w * 0.72 : w * 0.42, ph / 1.85);
     const px = w / 2 - pw / 2, py = h / 2 - ph / 2;
@@ -724,4 +724,11 @@ export function buildFlat(c: BuildContext, family: keyof typeof DRAW): Build {
     ground,
     description: describe[family]!,
   };
+}
+
+/** Draw a finished 2D composition directly (no particles). */
+export function drawFlatAsset(g: G, c: BuildContext, family: keyof typeof DRAW) {
+  g.fillStyle = groundFor(c);
+  g.fillRect(0, 0, c.w, c.h);
+  DRAW[family](g, "asset", c);
 }

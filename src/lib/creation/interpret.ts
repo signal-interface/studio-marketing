@@ -128,7 +128,11 @@ function titleCase(w: string) {
   return w.charAt(0).toUpperCase() + w.slice(1);
 }
 
-export function interpret(raw: string): ExperienceSpec {
+/**
+ * Interpret an intent. `as` re-reads the same words as a specific family —
+ * used by the possibility layer to show one idea in many forms.
+ */
+export function interpret(raw: string, as?: Family): ExperienceSpec {
   const intent = sanitiseIntent(raw);
   const seed = hashString(intent.toLowerCase());
   const tokens: string[] = intent.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
@@ -157,6 +161,7 @@ export function interpret(raw: string): ExperienceSpec {
   // A single short word with no rule match is treated as a name/subject
   // to be set in type as an identity study rather than forced elsewhere.
   if (family === "abstract" && tokens.length === 1 && tokens[0]!.length <= 14) family = "brand";
+  if (as) family = as;
 
   // ── Qualities ──
   const qualities: string[] = [];
@@ -236,7 +241,11 @@ export function interpret(raw: string): ExperienceSpec {
       break;
     case "image": {
       const scenes = ["sunset", "sunrise", "dusk", "dawn", "ocean", "sea", "beach", "forest", "mountains", "city", "skyline", "night", "desert", "aurora", "lake"];
-      const scene = tokens.find((t) => scenes.includes(t)) ?? "sunset";
+      // Re-read as an image without a scene word: celestial subjects become
+      // night skies; anything else gets a seeded scene.
+      const pool = ["sunset", "ocean", "forest", "mountains", "city", "night", "desert", "aurora"];
+      const fallback = !as ? "sunset" : tokens.some((t) => PLANETS[t]) ? "night" : pool[seed % pool.length]!;
+      const scene = tokens.find((t) => scenes.includes(t)) ?? fallback;
       const norm: Record<string, string> = { sunrise: "sunset", dusk: "sunset", dawn: "sunset", sea: "ocean", beach: "ocean", lake: "ocean", skyline: "city" };
       variant = norm[scene] ?? scene;
       composition = `${variant} · layered depth · atmospheric light`;

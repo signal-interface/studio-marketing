@@ -18,7 +18,8 @@ import { FAMILY_LABEL, type ExperienceSpec } from "@/lib/creation/spec";
 import { C, C_REDUCED, STAGES, creationAt, type Stage } from "@/lib/creation/timeline";
 import { mulberry32 } from "@/lib/creation/sample";
 import { detectTier } from "@/lib/experience/universe/renderer";
-import { CREATION } from "@/content/experience";
+import { BRIDGE, CREATION } from "@/content/experience";
+import { CREATED_EVENT } from "@/lib/creation/events";
 import type { Build } from "@/lib/creation/families/types";
 
 type Engine = typeof import("@/lib/creation/engine");
@@ -58,6 +59,9 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
   const artRef = useRef<HTMLDivElement>(null);
   const intentRef = useRef<HTMLParagraphElement>(null);
   const particlesRef = useRef<HTMLCanvasElement>(null);
+  // Separate surface for the CPU fallback: a canvas that held a WebGL
+  // context (even a failed or lost one) cannot provide a 2D context.
+  const cpuRef = useRef<HTMLCanvasElement>(null);
   const hiResHost = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<HTMLDivElement>(null);
@@ -125,6 +129,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
 
     const art = artRef.current!;
     const particles = particlesRef.current!;
+    const cpuCanvas = cpuRef.current!;
     const intentEl = intentRef.current!;
     const frameEl = frameRef.current!;
     const groundEl = groundRef.current!;
@@ -188,8 +193,12 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
         center: () => ({ x: particles.clientWidth / 2, y: particles.clientHeight / 2 }),
         onLost: () => {
           renderer = null;
+          particles.style.visibility = "hidden";
         },
       });
+      // A failed or lost WebGL surface can composite as an opaque block:
+      // never show it unless the renderer is live.
+      particles.style.visibility = renderer ? "visible" : "hidden";
       renderer?.load(src, build);
       run();
     };
@@ -261,13 +270,14 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
             darkGround,
           });
         } else if (engine && asset && !b.hiRes && !finished) {
-          engine.drawFormCpu(particles, b, b.tilt[0], b.tilt[1]);
+          engine.drawFormCpu(cpuCanvas, b, b.tilt[0], b.tilt[1]);
         }
 
         if (t >= end && !finished) {
           finished = true;
           setDone(true);
           setAnnounce(`${FAMILY_LABEL[spec.family]} ready. ${b.description}.`);
+          window.dispatchEvent(new CustomEvent(CREATED_EVENT, { detail: { intent: spec.intent } }));
         }
         // 2D assets are static once resolved: stop spending frames.
         const keepAlive = b.interaction === "rotate" && renderer && visible;
@@ -301,7 +311,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
       drag.y = Math.max(-0.9, Math.min(0.9, drag.y + (e.clientY - drag.ly) * 0.006));
       drag.lx = e.clientX;
       drag.ly = e.clientY;
-      if (!renderer && engine && build) engine.drawFormCpu(particles, build, build.tilt[0] + drag.y, build.tilt[1] + drag.x);
+      if (!renderer && engine && build) engine.drawFormCpu(cpuCanvas, build, build.tilt[0] + drag.y, build.tilt[1] + drag.x);
     };
     const onUp = () => {
       drag.active = false;
@@ -315,7 +325,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
       else if (e.key === "ArrowDown") drag.y = Math.min(0.9, drag.y + step);
       else return;
       e.preventDefault();
-      if (!renderer && engine) engine.drawFormCpu(particles, build, build.tilt[0] + drag.y, build.tilt[1] + drag.x);
+      if (!renderer && engine) engine.drawFormCpu(cpuCanvas, build, build.tilt[0] + drag.y, build.tilt[1] + drag.x);
     };
     art.addEventListener("pointerdown", onDown);
     art.addEventListener("pointermove", onMove);
@@ -467,6 +477,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
                 })}
               </p>
               <canvas ref={particlesRef} className="artboard-particles" aria-hidden="true" />
+              <canvas ref={cpuRef} className="artboard-cpu" aria-hidden="true" />
               {done && hint && <span className="artboard-hint">{hint}</span>}
             </div>
 
@@ -516,6 +527,12 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
                 {CREATION.cta}
               </a>
             </div>
+            <a href="#possibility" className="studio-bridge">
+              <span className="studio-bridge-line">{BRIDGE.line}</span>
+              <span className="studio-bridge-action">
+                {BRIDGE.action} <span aria-hidden="true">↓</span>
+              </span>
+            </a>
           </div>
         </section>
       )}

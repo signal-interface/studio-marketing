@@ -54,3 +54,16 @@ test("input is sanitised: control chars stripped, whitespace collapsed, length c
   // Markup is preserved as literal text (rendered via textContent, never HTML).
   assert.equal(interpret("<img src=x onerror=alert(1)>").intent, "<img src=x onerror=alert(1)>");
 });
+
+test("one intent can be re-read as every family (possibility layer)", () => {
+  for (const f of ["spatial", "brand", "interface", "motion", "image", "abstract"] as const) {
+    const s = interpret("Saturn", f);
+    assert.equal(s.family, f);
+    assert.equal(s.intent, "Saturn");
+    assert.ok(s.variant && s.composition, `${f} has a composition`);
+  }
+  assert.equal(interpret("Saturn", "image").variant, "night");
+  assert.equal(interpret("Saturn", "brand").name, "Saturn");
+  // Natural interpretation is unchanged by the option.
+  assert.equal(interpret("Saturn").family, "spatial");
+});
