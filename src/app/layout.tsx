@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SITE } from "@/lib/constants";
+import { ENTRANCE_PREFLIGHT } from "@/lib/experience/preflight";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -66,7 +67,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${dmSans.variable} ${jetbrainsMono.variable}`}>
+    // suppressHydrationWarning: the entrance preflight sets data-* on <html> before hydration.
+    <html
+      lang="en"
+      className={`${dmSans.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: ENTRANCE_PREFLIGHT }} />
+      </head>
       <body className="bg-white text-text font-sans antialiased overflow-x-hidden">
         <script
           type="application/ld+json"

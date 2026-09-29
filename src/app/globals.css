@@ -88,3 +88,259 @@ section[id] {
 .reveal-d3 {
   transition-delay: 0.3s;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Public experience — entrance + creation canvas
+   Marketing-site-local. Monochrome by founder-approved contract:
+   black universe → white creation canvas.
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  --canvas-white: #fbfbfa;
+  --canvas-ink: #0b0b0c;
+  --canvas-muted: #86868a;
+}
+
+/* Entrance: hidden unless the <head> preflight requested it, so
+   no-JS visitors and crawlers get the canvas directly. */
+.entrance {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000;
+  color: #fff;
+  overflow: hidden;
+}
+html[data-entrance] .entrance {
+  display: block;
+  /* Failsafe: if the script never takes ownership, reveal the canvas. */
+  animation: entrance-failsafe 0.4s ease 6.5s forwards;
+}
+html[data-entrance-live] .entrance {
+  animation: none;
+}
+@keyframes entrance-failsafe {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+html[data-entrance] body {
+  overflow: hidden;
+}
+
+.entrance-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.entrance[data-mode="lite"] .entrance-canvas {
+  display: none;
+}
+
+.entrance-words {
+  --ls: clamp(0.14em, 0.85vw, 0.34em);
+  position: absolute;
+  left: max(6vw, 20px);
+  right: max(6vw, 20px);
+  top: clamp(72px, 21vh, 210px);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(13px, 2.05vw, 30px);
+  letter-spacing: var(--ls);
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  color: rgba(238, 241, 246, 0.9);
+  text-shadow: 0 0 16px rgba(255, 255, 255, 0.14);
+}
+.entrance-word {
+  display: inline-block;
+  /* letter-spacing trails the last glyph; cancel it so edges align */
+  margin-right: calc(-1 * var(--ls));
+  will-change: transform, opacity, filter;
+}
+.entrance-word > span {
+  display: inline-block;
+  opacity: 0;
+  will-change: transform, opacity, filter;
+}
+
+.entrance-flash {
+  position: absolute;
+  inset: 0;
+  background: var(--canvas-white);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.entrance-skip {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  min-height: 44px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.44);
+  font: 500 11px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.entrance-skip:hover,
+.entrance-skip:focus-visible {
+  color: #fff;
+}
+.entrance-skip:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+}
+
+/* Creation canvas */
+.creation-canvas {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas-white);
+  color: var(--canvas-ink);
+  isolation: isolate;
+}
+/* A barely-there drafting grid: this is a surface for making things. */
+.creation-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(rgba(11, 11, 12, 0.075) 0.9px, transparent 1.1px);
+  background-size: 22px 22px;
+  background-position: center;
+  -webkit-mask-image: radial-gradient(ellipse 70% 62% at 50% 50%, #000 20%, transparent 78%);
+  mask-image: radial-gradient(ellipse 70% 62% at 50% 50%, #000 20%, transparent 78%);
+}
+
+.canvas-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: max(22px, env(safe-area-inset-top)) clamp(20px, 3vw, 44px) 0;
+  font-size: 11px;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+.canvas-brand {
+  font-weight: 600;
+  color: var(--canvas-ink);
+  text-decoration: none;
+}
+.canvas-navlink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--canvas-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.canvas-navlink:hover,
+.canvas-navlink:focus-visible {
+  color: var(--canvas-ink);
+}
+
+.canvas-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 clamp(20px, 6vw, 64px);
+  transform: translateY(-2vh);
+}
+.canvas-heading {
+  margin: 0;
+  max-width: 14ch;
+  font-size: clamp(42px, 7.2vw, 100px);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: -0.058em;
+  text-wrap: balance;
+  outline: none;
+}
+.canvas-sub {
+  margin: 24px 0 44px;
+  color: var(--canvas-muted);
+  font-size: clamp(13px, 1.25vw, 17px);
+  letter-spacing: 0.045em;
+}
+.canvas-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 24px;
+  border: 1px solid var(--canvas-ink);
+  border-radius: 999px;
+  color: var(--canvas-ink);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  transition:
+    background 0.25s ease,
+    color 0.25s ease;
+}
+.canvas-cta:hover,
+.canvas-cta:focus-visible {
+  background: var(--canvas-ink);
+  color: var(--canvas-white);
+}
+.canvas-cta:focus-visible,
+.canvas-navlink:focus-visible,
+.canvas-brand:focus-visible {
+  outline: 1px solid var(--canvas-ink);
+  outline-offset: 4px;
+}
+.canvas-foot {
+  margin: 0;
+  padding: 0 20px max(24px, env(safe-area-inset-bottom));
+  text-align: center;
+  color: #a4a4a8;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Arrival: content is fully present under the flash (no fade from
+   empty); it only settles, so the white *becomes* the canvas. */
+html[data-arrived] .canvas-center > * {
+  animation: canvas-settle 0.9s cubic-bezier(0.2, 0.72, 0.18, 1) both;
+}
+html[data-arrived] .canvas-center > :nth-child(2) {
+  animation-delay: 0.06s;
+}
+html[data-arrived] .canvas-center > :nth-child(3) {
+  animation-delay: 0.12s;
+}
+@keyframes canvas-settle {
+  from {
+    transform: translateY(10px) scale(1.01);
+    filter: blur(1.5px);
+  }
+  to {
+    transform: none;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-arrived] .canvas-center > * {
+    animation: none;
+  }
+}
