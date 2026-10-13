@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { buildCsp, isHttps } from "@/lib/csp";
 
 // ─────────────────────────────────────────────────────────────
 // Content-Security-Policy with a per-request nonce.
@@ -18,22 +19,10 @@ export function middleware(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
   const dev = process.env.NODE_ENV === "development";
 
-  const csp = [
-    "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "font-src 'self'",
-    `connect-src 'self'${dev ? " ws: wss:" : ""}`,
-    "worker-src 'self' blob:",
-    "media-src 'self'",
-    "manifest-src 'self'",
-    "object-src 'none'",
-    "base-uri 'none'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-    ...(dev ? [] : ["upgrade-insecure-requests"]),
-  ].join("; ");
+  const csp = buildCsp(nonce, {
+    dev,
+    https: isHttps(request.nextUrl.protocol, request.headers.get("x-forwarded-proto")),
+  });
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
