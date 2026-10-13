@@ -107,7 +107,19 @@ export default function EarlyAccess() {
         }),
       });
       if (res.ok) setDone(true);
-      else setError(res.status === 429 ? ACCESS.errors.rate : ACCESS.errors.generic);
+      else if (res.status === 429) setError(ACCESS.errors.rate);
+      else {
+        const code = res.status === 400 ? ((await res.json().catch(() => ({}))) as { error?: string }).error : undefined;
+        setError(
+          code === "invalid_email"
+            ? ACCESS.errors.email
+            : code === "invalid_name" || code === "name_required"
+              ? ACCESS.errors.name
+              : code === "invalid_company"
+                ? ACCESS.errors.company
+                : ACCESS.errors.generic
+        );
+      }
     } catch {
       setError(ACCESS.errors.network);
     } finally {
@@ -149,7 +161,7 @@ export default function EarlyAccess() {
             <div className="access-grid">
               <label className="access-field">
                 <span>Name</span>
-                <input name="name" type="text" required autoComplete="name" maxLength={200} value={form.name} onChange={set("name")} />
+                <input name="name" type="text" required autoComplete="name" maxLength={100} value={form.name} onChange={set("name")} />
               </label>
               <label className="access-field">
                 <span>Email</span>
@@ -159,7 +171,7 @@ export default function EarlyAccess() {
                 <span>
                   Company <em>optional</em>
                 </span>
-                <input name="company" type="text" autoComplete="organization" maxLength={200} value={form.company} onChange={set("company")} />
+                <input name="company" type="text" autoComplete="organization" maxLength={120} value={form.company} onChange={set("company")} />
               </label>
               <label className="access-field">
                 <span>

@@ -85,6 +85,9 @@ export const ACCESS = {
     rate: "Too many requests. Please try again later.",
     generic: "Something went wrong. Please try again.",
     network: "Network error. Please check your connection and try again.",
+    name: "Please enter your name (no links).",
+    email: "Please enter a valid email address.",
+    company: "Please check the company name (no links).",
   },
 } as const;
 

@@ -1,106 +1,80 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
-import { checkRateLimit } from "@/lib/rateLimiter";
-import {
-  waitlistNotificationHtml,
-  waitlistAutoResponseHtml,
-} from "@/lib/emails";
+import { ipLimiter, recipientLimiter } from "@/lib/rateLimiter";
+import { LIMITS, notificationSubject, originAllowed, validateSubmission } from "@/lib/waitlist";
+import { AUTO_REPLY_SUBJECT, waitlistAutoResponseHtml, waitlistNotificationHtml } from "@/lib/emails";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const json = (body: object, status = 200) =>
+  NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: NextRequest) {
-  // Rate limit by IP
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
-  const { allowed } = checkRateLimit(ip);
-  if (!allowed) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  // Same-origin browser submissions only (cross-site pages are rejected).
+  if (!originAllowed(request.headers.get("origin"), request.headers.get("host"))) {
+    return json({ error: "forbidden" }, 403);
   }
+
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (!ipLimiter.check(ip)) return json({ error: "rate_limited" }, 429);
+
+  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    return json({ error: "unsupported_media_type" }, 415);
+  }
+
+  // Bounded body read (never parse unbounded input).
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (declared > LIMITS.body) return json({ error: "payload_too_large" }, 413);
+  const raw = await request.text();
+  if (raw.length > LIMITS.body) return json({ error: "payload_too_large" }, 413);
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(raw);
   } catch {
-    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+    return json({ error: "invalid_json" }, 400);
   }
 
-  if (!body || typeof body !== "object") {
-    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
-  }
+  const result = validateSubmission(body);
+  if (!result.ok) return json({ error: result.error }, 400);
+  // Honeypot hit: indistinguishable success, nothing sent.
+  if (result.spam) return json({ success: true });
+  const data = result.data;
 
-  const { name, email, company, role } = body as {
-    name?: unknown;
-    email?: unknown;
-    company?: unknown;
-    role?: unknown;
-  };
-
-  if (!name || typeof name !== "string" || name.trim().length === 0) {
-    return NextResponse.json({ error: "name_required" }, { status: 400 });
-  }
-  if (!email || typeof email !== "string" || !EMAIL_RE.test(email)) {
-    return NextResponse.json({ error: "invalid_email" }, { status: 400 });
-  }
-
-  const companyStr =
-    typeof company === "string" && company.length > 0
-      ? company.slice(0, 200)
-      : undefined;
-  const roleStr =
-    typeof role === "string" && role.length > 0
-      ? role.slice(0, 100)
-      : undefined;
-
-  const data = {
-    name: name.trim().slice(0, 200),
-    email: email.trim().toLowerCase(),
-    company: companyStr,
-    role: roleStr,
-  };
-
-  // Send emails via Resend
   const apiKey = process.env.RESEND_API_KEY;
   const notifyTo = process.env.WAITLIST_NOTIFY_TO;
   const fromAddr = process.env.WAITLIST_FROM;
-
   if (!apiKey || !notifyTo || !fromAddr) {
-    console.error(
-      "[waitlist] Missing env vars: RESEND_API_KEY, WAITLIST_NOTIFY_TO, or WAITLIST_FROM"
-    );
-    // Still return success to the user — we log the failure server-side
-    // but don't leak infra details to the client.
-    return NextResponse.json({ success: true });
+    console.error("[waitlist] Missing env vars: RESEND_API_KEY, WAITLIST_NOTIFY_TO, or WAITLIST_FROM");
+    // Don't leak infrastructure details to the client.
+    return json({ success: true });
   }
 
   try {
     const resend = new Resend(apiKey);
-    const emailResults = await Promise.allSettled([
-      // Internal notification
+    const sends = [
       resend.emails.send({
         from: fromAddr,
         to: notifyTo,
-        subject: `New Studio Waitlist: ${data.company || data.name}`,
+        subject: notificationSubject(data),
         html: waitlistNotificationHtml(data),
       }),
-      // Auto-response to submitter
-      resend.emails.send({
-        from: fromAddr,
-        to: data.email,
-        subject: "You're on the Studio waitlist",
-        html: waitlistAutoResponseHtml(data),
-      }),
-    ]);
-
-    const emailErrors = emailResults.filter((r) => r.status === "rejected");
-    if (emailErrors.length > 0) {
-      console.error(
-        "[waitlist] email errors:",
-        emailErrors.map((r) => (r as PromiseRejectedResult).reason)
+    ];
+    // One auto-reply per address per day; contains no submitter text.
+    if (recipientLimiter.check(data.email)) {
+      sends.push(
+        resend.emails.send({
+          from: fromAddr,
+          to: data.email,
+          subject: AUTO_REPLY_SUBJECT,
+          html: waitlistAutoResponseHtml(),
+        })
       );
     }
-  } catch (err) {
-    console.error("[waitlist] Resend error:", err);
+    const results = await Promise.allSettled(sends);
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length) console.error("[waitlist] email errors:", failures.length);
+  } catch {
+    console.error("[waitlist] Resend error");
   }
 
-  return NextResponse.json({ success: true });
+  return json({ success: true });
 }
