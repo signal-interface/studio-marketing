@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import SiteHeader from "@/components/layout/SiteHeader";
 import Footer from "@/components/layout/Footer";
 import { TERMS_COPY } from "@/content/landing";
+
+export const metadata: Metadata = {
+  title: "Terms of Use",
+  alternates: { canonical: "/terms" },
+};
 
 export default function TermsPage() {
   return (

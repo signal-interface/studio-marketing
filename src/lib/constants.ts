@@ -1,8 +1,9 @@
 export const SITE = {
-  name: "Studio",
-  title: "Studio — Creative Intelligence",
+  name: "Faraday Studio",
+  title: "Faraday Studio — What do you want to create?",
+  shortTitle: "Faraday Studio",
   description:
-    "Studio is the creative intelligence operating system for teams who design, brand, and build. Early access — join the waitlist.",
+    "Start with an idea — typed or drawn. Faraday Studio is being built to take it from intent to creation: design, image, motion, spatial, interface and, in time, video. Now in early access.",
   url: "https://studio.faradaycapitalsystems.com",
-  ogImage: "https://studio.faradaycapitalsystems.com/opengraph-image",
+  themeColor: "#fbfbfa",
 } as const;
