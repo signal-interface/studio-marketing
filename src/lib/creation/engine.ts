@@ -5,8 +5,9 @@ import { buildMotion, sampleGlyphs } from "./families/motion.ts";
 import { KIND, type Build, type BuildContext } from "./families/types.ts";
 import { createCreationRenderer } from "./renderer.ts";
 import { drawFormCpu } from "./cpu.ts";
+import { sampleAt } from "./sample.ts";
 
-export { createCreationRenderer, sampleGlyphs, KIND, drawFormCpu };
+export { createCreationRenderer, sampleGlyphs, sampleAt, KIND, drawFormCpu };
 export type { Build, BuildContext };
 
 export function buildFor(ctx: BuildContext): Build {

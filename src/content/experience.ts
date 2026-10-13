@@ -96,3 +96,22 @@ export const FOOTER = {
   line: "A Faraday Capital Systems product",
   status: "In early access",
 } as const;
+
+export const DRAW = {
+  toggle: "Draw instead",
+  hint: "Draw something — a planet, a horizon, a shape",
+  surfaceLabel: "Drawing surface",
+  help: "Draw with a mouse, finger or stylus. Drawing needs a pointer; you can also type instead.",
+  clear: "Clear",
+  type: "Type instead",
+  create: "Create",
+  readingRow: "Reading",
+} as const;
+
+export const EXPAND = {
+  action: "See where it can go",
+  heading: "One idea, every form it could take",
+  continue: "Continue",
+  back: "Back to your creation",
+  note: "Drawn live in your browser from your idea — a demonstration, not Studio output.",
+} as const;

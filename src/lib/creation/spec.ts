@@ -11,7 +11,7 @@
 // Versioned independently of any Studio contract lineage.
 // ─────────────────────────────────────────────────────────────
 
-export const EXPERIENCE_SPEC_VERSION = "studio-marketing.experience-spec/0.1" as const;
+export const EXPERIENCE_SPEC_VERSION = "studio-marketing.experience-spec/0.2" as const;
 
 export type Family = "spatial" | "brand" | "interface" | "motion" | "image" | "abstract";
 
@@ -43,6 +43,9 @@ export interface ExperienceSpec {
   palette: Palette;
   /** Deterministic seed derived from the intent. */
   seed: number;
+  /** 0.2: where the intent came from, and what was read from a drawing. */
+  source?: "text" | "drawing";
+  reading?: string[];
 }
 
 export const FAMILY_LABEL: Record<Family, string> = {

@@ -235,12 +235,15 @@ function drawInterface(g: G, mode: Mode, c: BuildContext) {
     const px = w / 2 - pw / 2, py = h / 2 - ph / 2;
     box(g, mode, px, py, pw, ph, pw * 0.14, "#0f0f11");
     const ix = px + 8, iy = py + 8, iw = pw - 16, ih = ph - 16;
+    // Type scales with the device so small plates never clip.
+    const ks = Math.min(1, iw / 230);
+    const f = (n: number) => Math.max(7, Math.round(n * ks));
     box(g, mode, ix, iy, iw, ih, pw * 0.11, "#fbfbfa");
-    text(g, mode, spec.name, ix + 16, iy + 44, `600 17px ${sans}`, ink);
-    text(g, mode, "Today", ix + 16, iy + 62, `11px ${sans}`, muted);
+    text(g, mode, spec.name, ix + 16, iy + 44, `600 ${f(17)}px ${sans}`, ink);
+    text(g, mode, "Today", ix + 16, iy + 62, `${f(11)}px ${sans}`, muted);
     box(g, mode, ix + 12, iy + 78, iw - 24, ih * 0.26, 14, accent);
-    text(g, mode, m ? m[0]![0] : "Balance", ix + 26, iy + 102, `11px ${sans}`, "rgba(255,255,255,.8)");
-    text(g, mode, m ? m[0]![1] : "$12,480", ix + 26, iy + 132, `600 24px ${sans}`, "#ffffff");
+    text(g, mode, m ? m[0]![0] : "Balance", ix + 26, iy + 102, `${f(11)}px ${sans}`, "rgba(255,255,255,.8)");
+    text(g, mode, m ? m[0]![1] : "$12,480", ix + 26, iy + 132, `600 ${f(24)}px ${sans}`, "#ffffff");
     const rowY = iy + 90 + ih * 0.26;
     // Only as many rows as fit above the tab bar.
     const rowsFit = Math.max(1, Math.min(4, Math.floor((iy + ih - 56 - rowY) / 42)));
@@ -250,8 +253,8 @@ function drawInterface(g: G, mode: Mode, c: BuildContext) {
       box(g, mode, ix + 20, y + 8, 18, 18, 9, spec.palette.tones[k % 4] ?? accent);
       const labels = m ? ["Engineering", "Design", "Ops", "Sales"] : ["Studio", "Groceries", "Transit", "Transfer"];
       const values = m ? ["$212k", "$96k", "$88k", "$86k"] : ["-$48", "-$62", "-$3", "+$400"];
-      text(g, mode, labels[k]!, ix + 46, y + 22, `11px ${sans}`, ink);
-      text(g, mode, values[k]!, ix + iw - 22, y + 22, `11px ${sans}`, ink, "right");
+      text(g, mode, labels[k]!, ix + 46, y + 22, `${f(11)}px ${sans}`, ink);
+      text(g, mode, values[k]!, ix + iw - 22, y + 22, `${f(11)}px ${sans}`, ink, "right");
     }
     box(g, mode, ix, iy + ih - 46, iw, 46, 0, "#ffffff");
     for (let k = 0; k < 4; k++) box(g, mode, ix + iw * (0.14 + k * 0.24) - 7, iy + ih - 30, 14, 14, 7, k === 0 ? ink : "#d4d4d2");

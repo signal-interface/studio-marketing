@@ -12,15 +12,30 @@
 // labelled as such and never claims Studio produced the result.
 // ─────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { interpret, MAX_INTENT } from "@/lib/creation/interpret";
-import { FAMILY_LABEL, type ExperienceSpec } from "@/lib/creation/spec";
+import { FAMILY_LABEL, type ExperienceSpec, type Family } from "@/lib/creation/spec";
 import { C, C_REDUCED, STAGES, creationAt, type Stage } from "@/lib/creation/timeline";
 import { mulberry32 } from "@/lib/creation/sample";
 import { detectTier } from "@/lib/experience/universe/renderer";
-import { BRIDGE, CREATION } from "@/content/experience";
+import { BRIDGE, CREATION, DRAW, EXPAND } from "@/content/experience";
+import type { SketchResult } from "./SketchPad";
+import type { SourceArtifact } from "./Expansion";
+import { renderStrokes } from "@/lib/creation/strokes";
+
+// Interaction-only UI is code-split and loaded on intent (hover/focus,
+// creation complete). Rendered directly once loaded — not via Suspense,
+// whose reveal throttle would delay the visual response by ~300ms.
+type SketchPadT = typeof import("./SketchPad").default;
+type ExpansionT = typeof import("./Expansion").default;
+let sketchPadMod: Promise<SketchPadT> | null = null;
+let expansionMod: Promise<ExpansionT> | null = null;
+const loadSketchPad = () => (sketchPadMod ??= import("./SketchPad").then((m) => m.default));
+const loadExpansion = () => (expansionMod ??= import("./Expansion").then((m) => m.default));
+import type { PlateKind } from "@/lib/creation/plates";
 import { CREATED_EVENT } from "@/lib/creation/events";
 import type { Build } from "@/lib/creation/families/types";
+import type { CreationUniforms } from "@/lib/creation/renderer";
 
 type Engine = typeof import("@/lib/creation/engine");
 type Phase = "idle" | "creating";
@@ -42,6 +57,31 @@ function intentFontSize(text: string, w: number) {
   return Math.round(Math.max(22, Math.min(64, (w * 0.86) / Math.max(4, text.length * 0.52))));
 }
 
+const FAMILY_TO_PLATE: Record<Family, PlateKind> = {
+  brand: "design",
+  image: "image",
+  abstract: "image",
+  motion: "motion",
+  spatial: "spatial",
+  interface: "interface",
+};
+
+/** Fit a sketch's ink (cropped to its strokes) into the artboard. */
+function fitSketch(sk: SketchResult, aw: number, ah: number) {
+  const pts = sk.strokes.flat();
+  const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x));
+  const y0 = Math.min(...pts.map((p) => p.y)), y1 = Math.max(...pts.map((p) => p.y));
+  const pad = 12;
+  const bw = Math.max(1, x1 - x0) + pad * 2, bh = Math.max(1, y1 - y0) + pad * 2;
+  const scale = Math.min((aw * 0.72) / bw, (ah * 0.66) / bh, 2.2);
+  return {
+    strokes: sk.strokes.map((s) => s.map((p) => ({ x: p.x - x0 + pad, y: p.y - y0 + pad }))),
+    w: bw * scale,
+    h: bh * scale,
+    scale,
+  };
+}
+
 export default function CreationStudio({ children, cta }: { children: ReactNode; cta: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -54,10 +94,25 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
   const [announce, setAnnounce] = useState("");
   const [description, setDescription] = useState("");
   const [hint, setHint] = useState<string | undefined>();
+  const [mode, setMode] = useState<"type" | "draw">("type");
+  const [sketch, setSketch] = useState<SketchResult | null>(null);
+  const [expanded, setExpanded] = useState<SourceArtifact | null | false>(false);
+  const [SketchPad, setSketchPad] = useState<SketchPadT | null>(null);
+  const [Expansion, setExpansion] = useState<ExpansionT | null>(null);
+  const prefetchSketch = () => {
+    void loadSketchPad().then((C) => setSketchPad(() => C));
+  };
+  const openDraw = async () => {
+    const C = await loadSketchPad();
+    setSketchPad(() => C);
+    setMode("draw");
+  };
+  const sketchStageRef = useRef<HTMLCanvasElement>(null);
+  const snapshotRef = useRef<(() => SourceArtifact | null) | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const artRef = useRef<HTMLDivElement>(null);
-  const intentRef = useRef<HTMLParagraphElement>(null);
+  const intentRef = useRef<HTMLDivElement>(null);
   const particlesRef = useRef<HTMLCanvasElement>(null);
   // Separate surface for the CPU fallback: a canvas that held a WebGL
   // context (even a failed or lost one) cannot provide a 2D context.
@@ -93,6 +148,8 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
     setStage("Intent");
     setAnnounce("");
     setValue("");
+    setSketch(null);
+    setExpanded(false);
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
@@ -105,8 +162,29 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
     setRows(0);
     setDone(false);
     setStage("Intent");
+    setSketch(null);
+    setExpanded(false);
     setPhase("creating");
     setAnnounce(`Creating: ${s.intent}`);
+  }, []);
+
+  // DRAW → INTERPRET → STRUCTURE → MATERIALIZE: the strokes themselves
+  // become the particle source; their geometry chooses the form.
+  const startDrawing = useCallback(async (r: SketchResult) => {
+    const { readSketch } = await import("@/lib/creation/sketch");
+    const reading = readSketch(r.strokes);
+    const base = interpret(reading.descriptor, reading.family);
+    const s = { ...base, source: "drawing" as const, reading: reading.features, recognised: [] };
+    runRef.current?.stop();
+    setSketch(r);
+    setSpec(s);
+    setSize(artboardSize());
+    setRows(0);
+    setDone(false);
+    setStage("Intent");
+    setExpanded(false);
+    setPhase("creating");
+    setAnnounce(`Creating from your drawing: ${reading.label.toLowerCase()}`);
   }, []);
 
   // ── Run a creation once the stage DOM exists ──
@@ -126,6 +204,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
     let lastRows = 0;
     let finished = false;
     let darkGround = false;
+    let lastU: CreationUniforms | null = null;
 
     const art = artRef.current!;
     const particles = particlesRef.current!;
@@ -137,8 +216,11 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
     const underlayEl = underlayRef.current!;
 
     const setupAndRun = async () => {
+      // User Timing marks: visible in DevTools and used for profiling.
+      performance.mark("creation:setup:start");
       engine = await import("@/lib/creation/engine");
       await document.fonts?.ready;
+      performance.mark("creation:build:start");
       if (cancelled) return;
       const tier = detectTier();
       const n = tier === "high" ? 36000 : 14000;
@@ -151,6 +233,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
       };
       const { w, h } = size;
       build = engine.buildFor({ spec, w, h, dpr: Math.min(window.devicePixelRatio || 1, 2), n, fonts, rnd: mulberry32(spec.seed) });
+      performance.measure("creation:build", "creation:build:start");
       if (cancelled) return;
       setDescription(build.description);
       setHint(build.hint);
@@ -170,11 +253,24 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
         host?.replaceChildren(hiRes);
       }
 
-      // Source particles: the visitor's own words, exactly where they sit.
+      // Source particles: the visitor's own words — or strokes — exactly where they sit.
       const ir = intentEl.getBoundingClientRect();
       const ar = art.getBoundingClientRect();
       const ics = getComputedStyle(intentEl);
-      const src = engine.sampleGlyphs(
+      const sketchCanvas = sketchStageRef.current;
+      const src = spec.source === "drawing" && sketchCanvas
+        ? engine.sampleAt(
+            sketchCanvas,
+            {
+              x: ir.left + ir.width / 2 - (ar.left + ar.width / 2),
+              y: ir.top + ir.height / 2 - (ar.top + ar.height / 2),
+              w: sketchCanvas.clientWidth,
+              h: sketchCanvas.clientHeight,
+            },
+            n,
+            mulberry32(spec.seed ^ 0xabc)
+          )
+        : engine.sampleGlyphs(
         spec.intent,
         `${ics.fontWeight} ${ics.fontSize} ${ics.fontFamily}`,
         {
@@ -188,6 +284,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
         mulberry32(spec.seed ^ 0xabc)
       );
 
+      performance.measure("creation:setup", "creation:setup:start");
       renderer = engine.createCreationRenderer(particles, n, {
         dprCap: tier === "high" ? 2 : 1.5,
         center: () => ({ x: particles.clientWidth / 2, y: particles.clientHeight / 2 }),
@@ -208,7 +305,9 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
       let last = performance.now();
       const end = reduced ? C_REDUCED.end : C.end;
       const loop = (now: number) => {
-        const dt = Math.min(now - last, 100);
+        // Real time even on slow devices (coarser frames, not slow motion);
+        // only gaps over 250ms — a hidden tab — are clamped.
+        const dt = Math.min(now - last, 250);
         last = now;
         t = scrubRef.current ?? t + dt;
         const b = build!;
@@ -258,7 +357,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
           const fadeAfter = C.resolveIn + C.resolveDur;
           const fade = b.hiRes ? (reduced ? 0 : 1 - clamp01((t - fadeAfter) / 300)) : 1;
           const showParticles = reduced ? !b.hiRes : t >= C.structure;
-          renderer.render({
+          lastU = {
             a: f.a,
             b: f.b,
             visible: showParticles ? 1 : 0,
@@ -268,7 +367,8 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
             spin,
             wipe: wipeY,
             darkGround,
-          });
+          };
+          renderer.render(lastU);
         } else if (engine && asset && !b.hiRes && !finished) {
           engine.drawFormCpu(cpuCanvas, b, b.tilt[0], b.tilt[1]);
         }
@@ -356,6 +456,41 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
     };
     window.addEventListener("resize", onResize);
 
+    // Snapshot of the resolved artifact for "See where it can go".
+    snapshotRef.current = () => {
+      if (!build) return null;
+      const r = art.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const c = document.createElement("canvas");
+      c.width = Math.round(r.width * dpr);
+      c.height = Math.round(r.height * dpr);
+      const g = c.getContext("2d");
+      if (!g) return null;
+      g.scale(dpr, dpr);
+      g.fillStyle = build.ground;
+      g.fillRect(0, 0, r.width, r.height);
+      if (build.underlay) {
+        const R = build.underlay.radius;
+        const [t0, t1] = [spec.palette.tones[0] ?? "#cccccc", spec.palette.tones[1] ?? "#888888"];
+        const grd = g.createRadialGradient(r.width / 2 - R * 0.34, r.height / 2 - R * 0.4, 0, r.width / 2, r.height / 2, R);
+        grd.addColorStop(0, t0);
+        grd.addColorStop(0.6, t1);
+        grd.addColorStop(1, "#080706");
+        g.fillStyle = grd;
+        g.beginPath();
+        g.arc(r.width / 2, r.height / 2, R, 0, Math.PI * 2);
+        g.fill();
+      }
+      if (hiRes) g.drawImage(hiRes, 0, 0, r.width, r.height);
+      else if (renderer && lastU) {
+        // Draw in the same task as the render so the WebGL buffer is readable.
+        renderer.render(lastU);
+        const k = particles.width / particles.clientWidth;
+        g.drawImage(particles, 48 * k, 48 * k, r.width * k, r.height * k, 0, 0, r.width, r.height);
+      } else g.drawImage(cpuCanvas, 0, 0, r.width, r.height);
+      return { canvas: c, rect: r };
+    };
+
     runRef.current = { stop: () => (cancelled = true) };
     setupAndRun();
 
@@ -372,17 +507,50 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
       art.removeEventListener("pointercancel", onUp);
       art.removeEventListener("keydown", onKey);
       renderer?.dispose();
+      snapshotRef.current = null;
       host?.replaceChildren();
     };
   }, [phase, spec, size]);
 
   useEffect(() => {
-    if (done) againRef.current?.focus({ preventScroll: true });
+    if (!done) return;
+    againRef.current?.focus({ preventScroll: true });
+    // Warm "See where it can go" while the visitor looks at their creation,
+    // so the click gets an immediate visual response.
+    void loadExpansion().then((C) => setExpansion(() => C));
+    void import("@/lib/creation/plates");
   }, [done]);
+
+  // Draw the visitor's sketch onto the stage before it becomes material.
+  useLayoutEffect(() => {
+    const c = sketchStageRef.current;
+    if (phase !== "creating" || !sketch || !c || !size.w) return;
+    const f = fitSketch(sketch, size.w, size.h);
+    c.style.width = `${f.w}px`;
+    c.style.height = `${f.h}px`;
+    renderStrokes(c, f.strokes, sketch.pressures, { width: f.w, height: f.h, scale: f.scale });
+  }, [phase, sketch, size]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(value);
+  };
+
+  const expand = async () => {
+    // Intentional only: never auto-triggered.
+    performance.mark("expand:click");
+    const snap = snapshotRef.current?.() ?? null;
+    performance.measure("expand:snapshot", "expand:click");
+    if (!Expansion) {
+      const C = await loadExpansion();
+      setExpansion(() => C);
+    }
+    setExpanded(snap);
+    setAnnounce(`${EXPAND.heading}: Design, Image, Motion, Spatial, Interface, and Video — in development.`);
+  };
+  const collapse = () => {
+    setExpanded(false);
+    requestAnimationFrame(() => artRef.current?.focus({ preventScroll: false }));
   };
 
   const recognised = new Set(spec?.recognised ?? []);
@@ -395,7 +563,29 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
         {children}
         {mounted && (
           <form className="studio-form" onSubmit={submit} role="search" aria-label={CREATION.formLabel}>
+            {mode === "draw" && SketchPad ? (
+              <SketchPad
+                onCreate={startDrawing}
+                onCancel={() => {
+                  setMode("type");
+                  requestAnimationFrame(() => inputRef.current?.focus());
+                }}
+              />
+            ) : (
             <div className="studio-field">
+              <button
+                type="button"
+                className="studio-draw"
+                aria-label={DRAW.toggle}
+                title={DRAW.toggle}
+                onPointerEnter={prefetchSketch}
+                onFocus={prefetchSketch}
+                onClick={openDraw}
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="M3.5 16.5l1.2-4.1L13.6 3.5a1.4 1.4 0 012 0l.9.9a1.4 1.4 0 010 2l-8.9 8.9-4.1 1.2z M12.2 4.9l2.9 2.9" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                </svg>
+              </button>
               <label htmlFor="studio-intent" className="sr-only">
                 {CREATION.formLabel}
               </label>
@@ -419,6 +609,7 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
                 </svg>
               </button>
             </div>
+            )}
             <ul className="studio-chips" aria-label="Examples">
               {CREATION.examples.map((ex) => (
                 <li key={ex}>
@@ -444,7 +635,10 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
             ))}
           </ol>
 
-          <div className="studio-work">
+          {expanded !== false && Expansion && (
+            <Expansion intent={spec.intent} yours={FAMILY_TO_PLATE[spec.family]} source={expanded} />
+          )}
+          <div className="studio-work" hidden={expanded !== false}>
             <div
               ref={artRef}
               className="studio-artboard"
@@ -459,7 +653,12 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
               <div ref={groundRef} className="artboard-ground" />
               <div ref={underlayRef} className="artboard-underlay" />
               <div ref={hiResHost} className="artboard-hires-host" />
-              <p
+              {spec.source === "drawing" ? (
+                <div ref={intentRef} className="intent-line intent-sketch-wrap" data-reading="false" aria-hidden="true">
+                  <canvas ref={sketchStageRef} className="intent-sketch" />
+                </div>
+              ) : (
+              <div
                 ref={intentRef}
                 className="intent-line"
                 style={{ fontSize: intentSize }}
@@ -475,7 +674,8 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
                     </span>
                   );
                 })}
-              </p>
+              </div>
+              )}
               <canvas ref={particlesRef} className="artboard-particles" aria-hidden="true" />
               <canvas ref={cpuRef} className="artboard-cpu" aria-hidden="true" />
               {done && hint && <span className="artboard-hint">{hint}</span>}
@@ -491,7 +691,9 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
                   [
                     ["Family", FAMILY_LABEL[spec.family]],
                     ["Subject", spec.name !== spec.subject ? `${spec.subject} · “${spec.name}”` : spec.subject],
-                    ["Qualities", spec.qualities.length ? spec.qualities.join(", ") : "none stated"],
+                    spec.source === "drawing"
+                      ? [DRAW.readingRow, (spec.reading ?? []).join(" · ")]
+                      : ["Qualities", spec.qualities.length ? spec.qualities.join(", ") : "none stated"],
                     ["Composition", spec.composition],
                     ["Palette", ""],
                   ] as const
@@ -527,12 +729,25 @@ export default function CreationStudio({ children, cta }: { children: ReactNode;
                 {CREATION.cta}
               </a>
             </div>
-            <a href="#possibility" className="studio-bridge">
-              <span className="studio-bridge-line">{BRIDGE.line}</span>
-              <span className="studio-bridge-action">
-                {BRIDGE.action} <span aria-hidden="true">↓</span>
-              </span>
-            </a>
+            {expanded === false ? (
+              <button type="button" className="studio-bridge" onClick={expand}>
+                <span className="studio-bridge-line">{BRIDGE.line}</span>
+                <span className="studio-bridge-action">
+                  {EXPAND.action} <span aria-hidden="true">→</span>
+                </span>
+              </button>
+            ) : (
+              <div className="studio-expanded-actions">
+                <button type="button" className="studio-again" onClick={collapse}>
+                  {EXPAND.back}
+                </button>
+                <a href="#possibility" className="studio-bridge studio-bridge-continue">
+                  <span className="studio-bridge-action">
+                    {EXPAND.continue} <span aria-hidden="true">↓</span>
+                  </span>
+                </a>
+              </div>
+            )}
           </div>
         </section>
       )}

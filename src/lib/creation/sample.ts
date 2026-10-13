@@ -139,3 +139,18 @@ export function fitText(
   }
   return size;
 }
+
+/** Sample a canvas element's ink, offset into artboard space. */
+export function sampleAt(
+  canvas: HTMLCanvasElement,
+  box: { x: number; y: number; w: number; h: number },
+  n: number,
+  rnd: Rng
+) {
+  const s = sampleCanvas(canvas, box.w, box.h, n, rnd);
+  for (let i = 0; i < n; i++) {
+    s.pos[i * 3] = s.pos[i * 3]! + box.x;
+    s.pos[i * 3 + 1] = s.pos[i * 3 + 1]! + box.y;
+  }
+  return s.pos;
+}
