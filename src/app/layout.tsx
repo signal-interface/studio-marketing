@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SITE } from "@/lib/constants";
+import { ENTRANCE_PREFLIGHT } from "@/lib/experience/preflight";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -16,42 +18,48 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: SITE.title,
-  description: SITE.description,
   metadataBase: new URL(SITE.url),
+  title: { default: SITE.title, template: `%s — ${SITE.shortTitle}` },
+  description: SITE.description,
+  applicationName: SITE.name,
+  alternates: { canonical: "/" },
   icons: {
     icon: { url: "/favicon.svg", type: "image/svg+xml" },
-    apple: "/favicon.svg",
   },
   openGraph: {
     title: SITE.title,
     description: SITE.description,
-    url: SITE.url,
+    url: "/",
     siteName: SITE.name,
     type: "website",
+    locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
     title: SITE.title,
     description: SITE.description,
   },
-  robots: { index: false, follow: false },
-  other: {
-    "theme-color": "#1a1625",
-  },
+  robots: { index: true, follow: true },
+  formatDetection: { telephone: false, email: false, address: false },
 };
 
-const jsonLdOrganization = {
+export const viewport: Viewport = {
+  themeColor: SITE.themeColor,
+  colorScheme: "light",
+};
+
+const jsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "Studio",
-  applicationCategory: "BusinessApplication",
+  name: SITE.name,
+  applicationCategory: "DesignApplication",
   operatingSystem: "Web",
+  url: SITE.url,
   description: SITE.description,
   offers: {
     "@type": "Offer",
     availability: "https://schema.org/PreOrder",
-    description: "Early access — join the waitlist",
+    description: "Early access",
   },
   creator: {
     "@type": "Organization",
@@ -60,18 +68,31 @@ const jsonLdOrganization = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Per-request CSP nonce (set by middleware) for the inline scripts we own.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
-    <html lang="en" className={`${dmSans.variable} ${jetbrainsMono.variable}`}>
+    // suppressHydrationWarning: the entrance preflight sets data-* on <html> before hydration.
+    <html
+      lang="en"
+      className={`${dmSans.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Browsers hide nonce values from the DOM after parsing; suppress the expected hydration diff. */}
+        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: ENTRANCE_PREFLIGHT }} />
+      </head>
       <body className="bg-white text-text font-sans antialiased overflow-x-hidden">
         <script
           type="application/ld+json"
+          nonce={nonce}
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(jsonLdOrganization),
+            __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
           }}
         />
         {children}
